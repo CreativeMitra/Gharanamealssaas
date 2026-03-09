@@ -1,19 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { adminService } from '../services/adminService';
+import { deliveryEngine } from '../services/deliveryEngine';
+import { invoiceService } from '../services/invoiceService';
 import {
   Users, Package, Truck, CreditCard, Plus, Edit, Trash2,
   Search, Filter, CheckCircle, XCircle, LogOut, LayoutDashboard,
-  MoreVertical, UserPlus, Download, Shield
+  MoreVertical, UserPlus, Download, Shield, RefreshCw
 } from 'lucide-react';
 
 const AdminDashboard = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+  const [customers, setCustomers] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
+  const [riders, setRiders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: custs } = await adminService.getAvailableRiders(); // Just for mock
+      const { data: dels } = await deliveryEngine.getDailyDeliveries(new Date());
+      const { data: rs } = await adminService.getAvailableRiders();
+
+      if (custs) setCustomers(custs);
+      if (dels) setDeliveries(dels);
+      if (rs) setRiders(rs);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  const handleGenerateDeliveries = async () => {
+    setLoading(true);
+    await deliveryEngine.generateDeliveriesForDate(new Date());
+    const { data } = await deliveryEngine.getDailyDeliveries(new Date());
+    if (data) setDeliveries(data);
+    setLoading(false);
+  };
+
+  const handleGenerateInvoices = async () => {
+    setLoading(true);
+    const start = new Date();
+    start.setDate(1);
+    const end = new Date();
+    await invoiceService.generateMonthlyInvoices(start, end);
+    setLoading(false);
+    alert('Invoices generated successfully!');
+  };
 
   const stats = [
     { label: 'Total Customers', value: '1,248', icon: <Users className="w-5 h-5 text-blue-600" />, trend: '+12%' },
     { label: 'Active Subscriptions', value: '856', icon: <Package className="w-5 h-5 text-purple-600" />, trend: '+5%' },
-    { label: "Today's Deliveries", value: '412', icon: <Truck className="w-5 h-5 text-green-600" />, trend: '98%' },
+    { label: "Today's Deliveries", value: deliveries.length.toString(), icon: <Truck className="w-5 h-5 text-green-600" />, trend: '98%' },
     { label: 'Monthly Revenue', value: '₹12,45,000', icon: <CreditCard className="w-5 h-5 text-orange-600" />, trend: '+18%' },
   ];
 
@@ -24,6 +64,8 @@ const AdminDashboard = () => {
     { id: 'deliveries', label: 'Deliveries', icon: <Truck className="w-5 h-5" /> },
     { id: 'billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" /> },
   ];
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-purple-600">Syncing with Central Database...</div>;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -72,13 +114,23 @@ const AdminDashboard = () => {
               </div>
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-bold">Delivery Performance</h3>
-                  <div className="text-xs text-gray-400">Past 7 days</div>
-                </div>
-                <div className="flex items-center justify-center h-48 border-2 border-dashed border-gray-100 rounded-xl">
-                   <p className="text-gray-400 text-sm italic">Analytics Chart Placeholder</p>
-                </div>
+                 <h3 className="text-lg font-bold mb-4 text-center">System Actions</h3>
+                 <div className="grid grid-cols-2 gap-4 h-48 content-center">
+                    <button
+                      onClick={handleGenerateDeliveries}
+                      className="p-4 bg-green-50 border-2 border-green-100 rounded-2xl flex flex-col items-center gap-2 hover:bg-green-100 transition-colors"
+                    >
+                      <RefreshCw className="w-8 h-8 text-green-600" />
+                      <span className="font-bold text-green-800 text-sm">Generate Deliveries</span>
+                    </button>
+                    <button
+                      onClick={handleGenerateInvoices}
+                      className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col items-center gap-2 hover:bg-blue-100 transition-colors"
+                    >
+                      <CreditCard className="w-8 h-8 text-blue-600" />
+                      <span className="font-bold text-blue-800 text-sm">Generate Invoices</span>
+                    </button>
+                 </div>
               </div>
             </div>
           </div>
@@ -206,7 +258,7 @@ const AdminDashboard = () => {
         return (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="text-xl font-bold">Today's Deliveries</h3>
+                <h3 className="text-xl font-bold">Today's Deliveries ({deliveries.length})</h3>
                 <div className="flex gap-2">
                    <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">Export PDF</button>
                    <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700">Optimize Routes</button>
@@ -224,36 +276,42 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {[
-                    { customer: 'Rahul Sharma', address: 'Sec 18, NOIDA', meal: 'Lunch (Veg)', rider: 'Unassigned', status: 'Pending' },
-                    { customer: 'Amit Verma', address: 'Sec 21, NOIDA', meal: 'Lunch (Veg)', rider: 'Vikram', status: 'Out for Delivery' },
-                    { customer: 'Sneha Kapur', address: 'Sec 62, NOIDA', meal: 'Lunch (Non-Veg)', rider: 'Arjun', status: 'Delivered' },
-                  ].map((row, i) => (
+                  {deliveries.length > 0 ? deliveries.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50/50">
-                      <td className="px-6 py-4 font-bold text-sm">{row.customer}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate">{row.address}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{row.meal}</td>
+                      <td className="px-6 py-4 font-bold text-sm">{row.users?.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate">{row.users?.address}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{row.meal_type.toUpperCase()}</td>
                       <td className="px-6 py-4 text-sm">
-                        {row.rider === 'Unassigned' ? (
-                          <button className="text-purple-600 font-bold hover:underline">Assign Rider</button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold">{row.rider[0]}</span>
-                            {row.rider}
+                        {row.delivery_boy_id ? (
+                           <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold">R</span>
+                            Assigned
                           </div>
+                        ) : (
+                          <select
+                            onChange={(e) => adminService.assignRider(row.id, e.target.value)}
+                            className="text-xs border rounded p-1 text-purple-600 font-bold"
+                          >
+                            <option>Assign Rider</option>
+                            {riders.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                          </select>
                         )}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                          row.status === 'Delivered' ? 'bg-green-100 text-green-700' :
-                          row.status === 'Pending' ? 'bg-gray-100 text-gray-600' :
+                          row.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                          row.status === 'pending' ? 'bg-gray-100 text-gray-600' :
                           'bg-blue-100 text-blue-700'
                         }`}>
                           {row.status}
                         </span>
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-400">No deliveries generated for today.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -271,40 +329,12 @@ const AdminDashboard = () => {
               </div>
               <h4 className="text-lg font-bold mb-2">Generate Monthly Invoices</h4>
               <p className="text-gray-500 max-w-md mx-auto mb-6">System will calculate plan price minus paused days for all active subscriptions.</p>
-              <button className="px-8 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all">
+              <button
+                onClick={handleGenerateInvoices}
+                className="px-8 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all"
+              >
                 Run Invoice Generator
               </button>
-            </div>
-            <div className="border-t border-gray-100 overflow-x-auto">
-               <table className="w-full">
-                  <thead className="bg-gray-50 text-left">
-                    <tr>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Invoice</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Customer</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Amount</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {[
-                      { id: 'INV-1024', customer: 'Rahul Sharma', amount: '₹2,350', status: 'Unpaid' },
-                      { id: 'INV-1023', customer: 'John Doe', amount: '₹2,500', status: 'Paid' },
-                    ].map((row, i) => (
-                      <tr key={i}>
-                        <td className="px-6 py-4 text-sm font-medium">{row.id}</td>
-                        <td className="px-6 py-4 text-sm">{row.customer}</td>
-                        <td className="px-6 py-4 text-sm font-bold">{row.amount}</td>
-                        <td className="px-6 py-4 text-sm">
-                           <span className={row.status === 'Paid' ? 'text-green-600' : 'text-orange-600'}>{row.status}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                           <button className="p-2 text-gray-400 hover:text-purple-600"><Download className="w-4 h-4" /></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-               </table>
             </div>
           </div>
         );

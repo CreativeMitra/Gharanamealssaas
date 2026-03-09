@@ -4,24 +4,30 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = 'https://mock.supabase.co'
 const supabaseKey = 'mock-key'
 
+const mockQuery = {
+  data: [],
+  error: null,
+  select: function() { return this; },
+  eq: function() { return this; },
+  match: function() { return this; },
+  order: function() { return this; },
+  insert: function(data) { this.data = data; return this; },
+  update: function(data) { this.data = data; return this; },
+  delete: function() { return this; },
+  then: function(cb) {
+    cb({ data: this.data, error: this.error });
+    return Promise.resolve({ data: this.data, error: this.error });
+  }
+};
+
 export const supabase = {
-  from: (table) => ({
-    select: () => ({
-      eq: () => ({ data: [], error: null }),
-      match: () => ({ data: [], error: null }),
-      order: () => ({ data: [], error: null }),
-    }),
-    insert: (data) => ({ data, error: null }),
-    update: (data) => ({
-      eq: () => ({ data, error: null }),
-    }),
-    delete: () => ({
-      eq: () => ({ data: null, error: null }),
-    }),
-  }),
+  from: (table) => {
+    // Return a fresh mockQuery object for each call to 'from'
+    return { ...mockQuery, data: [] };
+  },
   auth: {
-    signIn: (credentials) => ({ data: { user: { id: '1' } }, error: null }),
-    signUp: (credentials) => ({ data: { user: { id: '2' } }, error: null }),
-    signOut: () => ({ error: null }),
+    signIn: (credentials) => Promise.resolve({ data: { user: { id: '1' } }, error: null }),
+    signUp: (credentials) => Promise.resolve({ data: { user: { id: '2' } }, error: null }),
+    signOut: () => Promise.resolve({ error: null }),
   }
 }

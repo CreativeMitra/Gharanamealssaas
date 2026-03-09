@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { subscriptionService } from '../services/subscriptionService';
+import { pauseService } from '../services/pauseService';
+import { invoiceService } from '../services/invoiceService';
 import {
   Calendar, Clock, Truck, CreditCard, History, Settings,
   PauseCircle, PlayCircle, LogOut, ChevronRight, Package
@@ -8,23 +11,59 @@ import {
 const CustomerDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
-  const [isPaused, setIsPaused] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      if (user?.id) {
+        const { data: sub } = await subscriptionService.getCurrentSubscription(user.id);
+        const { data: invs } = await invoiceService.getCustomerInvoices(user.id);
+        if (sub) setSubscription(sub);
+        if (invs) setInvoices(invs);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [user?.id]);
+
+  const handlePause = async (start, resume) => {
+    if (subscription) {
+      const { error } = await pauseService.pauseSubscription(subscription.id, start, resume);
+      if (!error) {
+        setSubscription({ ...subscription, status: 'paused', pause_start_date: start.toISOString(), pause_resume_date: resume.toISOString() });
+      }
+    }
+  };
+
+  const handleResume = async () => {
+    if (subscription) {
+      const { error } = await pauseService.resumeSubscription(subscription.id);
+      if (!error) {
+        setSubscription({ ...subscription, status: 'active', pause_start_date: null, pause_resume_date: null });
+      }
+    }
+  };
 
   const stats = [
-    { label: 'Active Plan', value: 'Monthly Lunch', icon: <Package className="w-5 h-5" /> },
+    { label: 'Active Plan', value: subscription?.meal_plans?.name || 'No Active Plan', icon: <Package className="w-5 h-5" /> },
     { label: 'Next Delivery', value: '15 Mar, 12:30 PM', icon: <Clock className="w-5 h-5" /> },
     { label: 'Delivery Status', value: 'Out for delivery', icon: <Truck className="w-5 h-5 text-blue-600" /> },
-    { label: 'Payment Status', value: 'Paid', icon: <CreditCard className="w-5 h-5 text-green-600" /> },
+    { label: 'Payment Status', value: invoices.some(i => i.status === 'unpaid') ? 'Unpaid' : 'Paid', icon: <CreditCard className="w-5 h-5 text-green-600" /> },
   ];
 
   const menuItems = [
     { id: 'overview', label: 'Overview', icon: <ChevronRight className="w-5 h-5" /> },
     { id: 'subscription', label: 'My Subscription', icon: <Package className="w-5 h-5" /> },
-    { id: 'pause', label: 'Pause Delivery', icon: isPaused ? <PlayCircle className="w-5 h-5 text-green-600" /> : <PauseCircle className="w-5 h-5 text-orange-600" /> },
+    { id: 'pause', label: 'Pause Delivery', icon: subscription?.status === 'paused' ? <PlayCircle className="w-5 h-5 text-green-600" /> : <PauseCircle className="w-5 h-5 text-orange-600" /> },
     { id: 'history', label: 'Delivery History', icon: <History className="w-5 h-5" /> },
     { id: 'billing', label: 'Billing & Invoices', icon: <CreditCard className="w-5 h-5" /> },
     { id: 'settings', label: 'Profile Settings', icon: <Settings className="w-5 h-5" /> },
   ];
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400">Syncing with Backend...</div>;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -59,40 +98,53 @@ const CustomerDashboard = () => {
         return (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-xl font-bold mb-6">Current Subscription</h3>
-            <div className="space-y-6">
-              <div className="p-6 border-2 border-blue-100 rounded-xl bg-blue-50/30">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="text-2xl font-bold text-blue-900">Monthly Lunch Plan</h4>
-                    <p className="text-gray-600">Pure Veg Home-cooked Meals</p>
+            {subscription ? (
+              <div className="space-y-6">
+                <div className="p-6 border-2 border-blue-100 rounded-xl bg-blue-50/30">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="text-2xl font-bold text-blue-900">{subscription.meal_plans?.name}</h4>
+                      <p className="text-gray-600">{subscription.meal_plans?.description || 'Pure Veg Home-cooked Meals'}</p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold text-white ${subscription.status === 'active' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+                      {subscription.status.toUpperCase()}
+                    </span>
                   </div>
-                  <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-semibold">Active</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-blue-100">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">Price</p>
-                    <p className="font-bold text-lg">₹2,500</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-blue-100">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Price</p>
+                      <p className="font-bold text-lg">₹{subscription.meal_plans?.price}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Started</p>
+                      <p className="font-bold text-lg">{new Date(subscription.start_date).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Remaining</p>
+                      <p className="font-bold text-lg text-orange-600">{subscription.remaining_meals} Meals</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Expiry</p>
+                      <p className="font-bold text-lg">{new Date(subscription.end_date).toLocaleDateString()}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">Started</p>
-                    <p className="font-bold text-lg">01 Mar 2024</p>
+                  <div className="mt-6 flex flex-wrap gap-4">
+                    <button className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Renew Plan</button>
+                    <button className="px-6 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors">Upgrade</button>
+                    <button
+                      onClick={() => subscriptionService.cancelSubscription(subscription.id)}
+                      className="px-6 py-2 text-red-600 font-semibold hover:underline"
+                    >
+                      Cancel Subscription
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">Remaining</p>
-                    <p className="font-bold text-lg text-orange-600">16 Days</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">Total Meals</p>
-                    <p className="font-bold text-lg">30 Meals</p>
-                  </div>
-                </div>
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <button className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Renew Plan</button>
-                  <button className="px-6 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors">Upgrade</button>
-                  <button className="px-6 py-2 text-red-600 font-semibold hover:underline">Cancel Subscription</button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-12 text-center border-2 border-dashed border-gray-100 rounded-xl">
+                 <p className="text-gray-400 font-bold">No active subscription found. Browse plans to get started!</p>
+              </div>
+            )}
           </div>
         );
       case 'pause':
@@ -113,15 +165,15 @@ const CustomerDashboard = () => {
                 </div>
               </div>
               <button
-                onClick={() => setIsPaused(!isPaused)}
-                className={`w-full py-3 rounded-lg font-bold text-white transition-colors ${isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+                onClick={() => subscription?.status === 'paused' ? handleResume() : handlePause(new Date(), new Date())}
+                className={`w-full py-3 rounded-lg font-bold text-white transition-colors ${subscription?.status === 'paused' ? 'bg-green-600 hover:bg-green-700' : 'bg-orange-600 hover:bg-orange-700'}`}
               >
-                {isPaused ? 'Resume Deliveries' : 'Confirm Pause'}
+                {subscription?.status === 'paused' ? 'Resume Deliveries' : 'Confirm Pause'}
               </button>
-              {isPaused && (
+              {subscription?.status === 'paused' && (
                 <div className="p-4 bg-orange-50 border border-orange-100 text-orange-800 rounded-lg flex items-center">
                   <PauseCircle className="w-5 h-5 mr-2" />
-                  Your deliveries are currently paused until 20 Mar 2024.
+                  Your deliveries are currently paused until {new Date(subscription.pause_resume_date).toLocaleDateString()}.
                 </div>
               )}
             </div>
@@ -179,9 +231,8 @@ const CustomerDashboard = () => {
               </div>
               <div className="flex items-center p-6 bg-gray-50 rounded-xl border border-gray-200">
                 <div className="flex-1">
-                  <p className="text-gray-500 text-sm">Next Bill Due</p>
-                  <p className="text-3xl font-bold">₹2,500</p>
-                  <p className="text-gray-400 text-xs mt-1">For period 01 Apr - 30 Apr 2024</p>
+                  <p className="text-gray-500 text-sm">Amount Due</p>
+                  <p className="text-3xl font-bold">₹{invoices.filter(i => i.status === 'unpaid').reduce((acc, curr) => acc + parseFloat(curr.amount), 0).toFixed(2)}</p>
                 </div>
                 <button className="px-8 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors">
                   Pay Now
@@ -194,31 +245,27 @@ const CustomerDashboard = () => {
                 <h4 className="font-bold">Recent Invoices</h4>
               </div>
               <div className="divide-y divide-gray-100">
-                {[
-                  { id: 'INV-001', date: '01 Mar 2024', amount: '₹2,500', status: 'Paid' },
-                  { id: 'INV-000', date: '01 Feb 2024', amount: '₹2,500', status: 'Paid' },
-                ].map((inv) => (
+                {invoices.length > 0 ? invoices.map((inv) => (
                   <div key={inv.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                     <div className="flex items-center">
                       <div className="p-2 bg-blue-50 rounded-lg mr-4">
                         <CreditCard className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-bold text-gray-900">{inv.id}</p>
-                        <p className="text-sm text-gray-500">{inv.date}</p>
+                        <p className="font-bold text-gray-900">INV-{inv.id.substring(0, 4)}</p>
+                        <p className="text-sm text-gray-500">{new Date(inv.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-right">
-                        <p className="font-bold">{inv.amount}</p>
-                        <p className="text-xs text-green-600 font-semibold uppercase">{inv.status}</p>
+                        <p className="font-bold">₹{parseFloat(inv.amount).toFixed(2)}</p>
+                        <p className={`text-xs font-semibold uppercase ${inv.status === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{inv.status}</p>
                       </div>
-                      <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Package className="w-5 h-5" />
-                      </button>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="p-8 text-center text-gray-400">No invoices yet</div>
+                )}
               </div>
             </div>
           </div>
