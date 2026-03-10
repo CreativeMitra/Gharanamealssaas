@@ -1,26 +1,34 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Phone, Lock, CheckCircle2 } from 'lucide-react';
+import { Phone, CheckCircle2 } from 'lucide-react';
 
 const CustomerLogin = () => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState(1); // 1: Phone, 2: OTP
-  const { login } = useAuth();
+  const [error, setError] = useState('');
+  const { loginWithOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (phone.length >= 10) {
+    setError('');
+    const { error } = await loginWithOtp(phone);
+    if (error) {
+      setError(error.message);
+    } else {
       setStep(2);
     }
   };
 
-  const handleVerifyOtp = (e) => {
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (otp.length === 4) {
-      login({ id: '1', name: 'John Doe', role: 'customer', phone });
+    setError('');
+    const { data, error } = await verifyOtp(phone, otp);
+    if (error) {
+      setError(error.message);
+    } else if (data.user) {
       navigate('/customer/dashboard');
     }
   };
@@ -30,6 +38,8 @@ const CustomerLogin = () => {
       <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
         <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Customer Login</h2>
         <p className="text-gray-500 mb-8 text-center">Enter your details to access your account</p>
+
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
 
         {step === 1 ? (
           <form onSubmit={handleSendOtp} className="space-y-6">
@@ -43,7 +53,7 @@ const CustomerLogin = () => {
                   type="tel"
                   required
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter 10-digit phone number"
+                  placeholder="Enter phone number (+1234567890)"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
@@ -59,17 +69,17 @@ const CustomerLogin = () => {
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Enter 4-digit OTP</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Enter 6-digit OTP</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <CheckCircle2 className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
                   type="text"
-                  maxLength={4}
+                  maxLength={6}
                   required
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-center tracking-widest text-2xl font-bold"
-                  placeholder="0000"
+                  placeholder="000000"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                 />

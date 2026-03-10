@@ -6,13 +6,17 @@ import { Shield, Lock, Mail } from 'lucide-react';
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (email && password) {
-      login({ id: 'admin-1', name: 'Admin User', role: 'admin', email });
+    setError('');
+    const { data, error } = await login(email, password);
+    if (error) {
+      setError(error.message);
+    } else if (data.user) {
       navigate('/admin/dashboard');
     }
   };
@@ -27,6 +31,8 @@ const AdminLogin = () => {
         </div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Admin Portal</h2>
         <p className="text-gray-500 mb-8 text-center">Sign in to manage operations</p>
+
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>

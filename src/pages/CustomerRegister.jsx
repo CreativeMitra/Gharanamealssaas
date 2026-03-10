@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Phone, MapPin, Coffee, CheckCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const CustomerRegister = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +11,8 @@ const CustomerRegister = () => {
     address: '',
     preferredMeal: 'veg'
   });
-  const { login } = useAuth();
+  const [error, setError] = useState('');
+  const { loginWithOtp } = useAuth();
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -18,10 +20,22 @@ const CustomerRegister = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    login({ ...formData, id: '2', role: 'customer' });
-    navigate('/customer/dashboard');
+    setError('');
+
+    // In a real app, we would use Supabase Auth to create the user first.
+    // For this flow, we'll assume the user is signing in with OTP and we're just creating their profile.
+    const { data, error: authError } = await loginWithOtp(formData.phone);
+
+    if (authError) {
+      setError(authError.message);
+    } else {
+      // Logic to save profile data would typically happen after OTP verification
+      // But we can store it in a temporary state or local storage for the next step.
+      localStorage.setItem('pending_profile', JSON.stringify(formData));
+      navigate('/customer/login');
+    }
   };
 
   return (
@@ -29,6 +43,8 @@ const CustomerRegister = () => {
       <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-lg border border-gray-100 my-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Create Account</h2>
         <p className="text-gray-500 mb-8 text-center">Join MealMate for healthy home-cooked meals</p>
+
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div>
@@ -60,7 +76,7 @@ const CustomerRegister = () => {
                 name="phone"
                 required
                 className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter 10-digit phone number"
+                placeholder="Enter phone number (+1234567890)"
                 value={formData.phone}
                 onChange={handleInputChange}
               />

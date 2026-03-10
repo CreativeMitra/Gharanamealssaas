@@ -5,8 +5,7 @@ export const subscriptionService = {
     try {
       const { data, error } = await supabase
         .from('meal_plans')
-        .select('*')
-        .eq('is_active', true);
+        .select('*');
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
@@ -15,21 +14,16 @@ export const subscriptionService = {
     }
   },
 
-  subscribe: async (customerId, planId, startDate) => {
+  subscribe: async (customerId, planId, mealsCount) => {
     try {
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 30);
-
       const { data, error } = await supabase
         .from('subscriptions')
         .insert({
           customer_id: customerId,
           plan_id: planId,
-          status: 'active',
-          start_date: startDate.toISOString().split('T')[0],
-          end_date: endDate.toISOString().split('T')[0],
-          remaining_meals: 30,
-          created_at: new Date().toISOString()
+          start_date: new Date().toISOString().split('T')[0],
+          remaining_days: mealsCount,
+          status: 'active'
         });
       if (error) throw error;
       return { data, error: null };

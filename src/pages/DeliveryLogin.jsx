@@ -7,18 +7,28 @@ const DeliveryLogin = () => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState(1);
-  const { login } = useAuth();
+  const [error, setError] = useState('');
+  const { loginWithOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (phone.length >= 10) setStep(2);
+    setError('');
+    const { error } = await loginWithOtp(phone);
+    if (error) {
+      setError(error.message);
+    } else {
+      setStep(2);
+    }
   };
 
-  const handleVerifyOtp = (e) => {
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (otp.length === 4) {
-      login({ id: 'rider-1', name: 'Vikram Rider', role: 'delivery', phone });
+    setError('');
+    const { data, error } = await verifyOtp(phone, otp);
+    if (error) {
+      setError(error.message);
+    } else if (data.user) {
       navigate('/delivery/dashboard');
     }
   };
@@ -34,6 +44,8 @@ const DeliveryLogin = () => {
         <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Delivery Partner</h2>
         <p className="text-gray-500 mb-8 text-center">Login to see your daily assignments</p>
 
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+
         {step === 1 ? (
           <form onSubmit={handleSendOtp} className="space-y-6">
             <div>
@@ -46,7 +58,7 @@ const DeliveryLogin = () => {
                   type="tel"
                   required
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
-                  placeholder="Enter your phone number"
+                  placeholder="Enter phone number (+1234567890)"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
@@ -62,13 +74,13 @@ const DeliveryLogin = () => {
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-center">Enter 4-digit OTP</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2 text-center">Enter 6-digit OTP</label>
               <input
                 type="text"
-                maxLength={4}
+                maxLength={6}
                 required
                 className="block w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500 text-center tracking-widest text-2xl font-bold"
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
               />
