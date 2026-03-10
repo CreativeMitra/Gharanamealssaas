@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { subscriptionService } from '../services/subscriptionService';
 import { pauseService } from '../services/pauseService';
 import { invoiceService } from '../services/invoiceService';
+import { paymentService } from '../services/paymentService';
 import {
   Calendar, Clock, Truck, CreditCard, History, Settings,
   PauseCircle, PlayCircle, LogOut, ChevronRight, Package
@@ -47,6 +48,20 @@ const CustomerDashboard = () => {
     }
   };
 
+  const handlePayment = async (invoiceId, amount) => {
+    setLoading(true);
+    const { success, message } = await paymentService.initiatePayment(invoiceId, amount);
+    if (success) {
+      alert(message);
+      // Refresh invoices after payment
+      const { data: invs } = await invoiceService.getCustomerInvoices(user.id);
+      if (invs) setInvoices(invs);
+    } else {
+      alert('Payment failed, please try again');
+    }
+    setLoading(false);
+  };
+
   const stats = [
     { label: 'Active Plan', value: subscription?.meal_plans?.plan_name || 'No Active Plan', icon: <Package className="w-5 h-5" /> },
     { label: 'Delivery Status', value: 'Out for delivery', icon: <Truck className="w-5 h-5 text-blue-600" /> },
@@ -62,7 +77,7 @@ const CustomerDashboard = () => {
     { id: 'settings', label: 'Profile Settings', icon: <Settings className="w-5 h-5" /> },
   ];
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400">Syncing with Supabase...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400">Processing...</div>;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -142,9 +157,19 @@ const CustomerDashboard = () => {
                       <p className="font-bold text-gray-900">Invoice #{inv.id.substring(0, 4)}</p>
                       <p className="text-sm text-gray-500">{new Date(inv.created_at).toLocaleDateString()}</p>
                     </div>
-                    <div className="text-right">
-                        <p className="font-bold">₹{inv.amount}</p>
-                        <p className={`text-xs font-semibold uppercase ${inv.status === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{inv.status}</p>
+                    <div className="text-right flex items-center gap-4">
+                        <div>
+                           <p className="font-bold">₹{parseFloat(inv.amount).toFixed(2)}</p>
+                           <p className={`text-xs font-semibold uppercase ${inv.status === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{inv.status}</p>
+                        </div>
+                        {inv.status === 'unpaid' && (
+                          <button
+                            onClick={() => handlePayment(inv.id, inv.amount)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors"
+                          >
+                            Pay
+                          </button>
+                        )}
                     </div>
                   </div>
                 )) : <p className="p-8 text-center text-gray-400">No invoices yet</p>}

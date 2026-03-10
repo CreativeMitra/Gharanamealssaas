@@ -1,28 +1,26 @@
 import { supabase } from '../lib/supabase';
 
 export const deliveryEngine = {
-  // Automatically generates the daily delivery list for a given date
+  // Logic to automatically generate daily delivery records for today
   generateDeliveriesForDate: async (date) => {
     try {
       const dateStr = date.toISOString().split('T')[0];
 
-      // 1. Check if deliveries already exist for this date to prevent duplicates
-      const { data: existing, error: checkError } = await supabase
-        .from('deliveries')
-        .select('id')
-        .eq('delivery_date', dateStr)
-        .limit(1);
-
-      if (checkError) throw checkError;
-      if (existing && existing.length > 0) return { data: existing, error: 'Deliveries already generated for today' };
-
-      // 2. Fetch all active subscriptions
+      // 1. Fetch active, unpaused subscriptions
       const { data: activeSubscriptions, error: subscriptionError } = await supabase
         .from('subscriptions')
         .select('*, customers(*)')
         .eq('status', 'active');
 
       if (subscriptionError) throw subscriptionError;
+
+      // 2. Fetch available delivery staff
+      const { data: deliveryStaff, error: staffError } = await supabase
+        .from('delivery_staff')
+        .select('*')
+        .eq('status', 'active');
+
+      if (staffError) throw staffError;
 
       // 3. Filter out paused subscriptions for this date
       const activeSubs = activeSubscriptions.filter(sub => {
@@ -35,22 +33,28 @@ export const deliveryEngine = {
         return true;
       });
 
-      // 4. Generate delivery records
-      const deliveries = activeSubs.map((sub) => ({
-        customer_id: sub.customer_id,
-        delivery_date: dateStr,
-        meal_type: 'veg', // Default or fetch from profile
-        status: 'pending'
-      }));
+      // 4. Generate delivery records with automatic rider assignment (round-robin)
+      const deliveries = activeSubs.map((sub, index) => {
+        const riderIndex = index % deliveryStaff.length;
+        const assignedRider = deliveryStaff[riderIndex];
 
-      if (deliveries.length === 0) return { data: [], error: 'No active subscriptions to generate deliveries for' };
+        return {
+          customer_id: sub.customer_id,
+          delivery_date: dateStr,
+          meal_type: 'veg', // Default or fetch from profile
+          status: 'pending',
+          delivery_boy_id: assignedRider ? assignedRider.id : null
+        };
+      });
 
-      // 5. Batch insert into the deliveries table
-      const { data, error } = await supabase
+      if (deliveries.length === 0) return { data: [], error: 'No deliveries to generate' };
+
+      // 5. Batch insert deliveries
+      const { data, error: insertError } = await supabase
         .from('deliveries')
         .insert(deliveries);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
       return { data, error: null };
     } catch (error) {
       console.error('Error generating deliveries:', error);
@@ -58,12 +62,11 @@ export const deliveryEngine = {
     }
   },
 
-  // Get all generated deliveries for a specific day
   getDailyDeliveries: async (date) => {
     try {
       const { data, error } = await supabase
         .from('deliveries')
-        .select('*, customers(*)')
+        .select('*, customers(*), delivery_staff(*)')
         .eq('delivery_date', date.toISOString().split('T')[0]);
       if (error) throw error;
       return { data, error: null };
